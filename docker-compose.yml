@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  entry-service:
+    build:
+      context: ./api_gateway
+      dockerfile: Dockerfile
+    container_name: api_gateway
+    ports:
+      - "4000:3000" # Проброс порта 3000 контейнера на 4000 хоста
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: always
+    command: [ "sh", "-c", "until nc -z rabbitmq 5672; do echo waiting for rabbitmq; sleep 2; done; node src/app.js" ]
+
+  data-collector:
+    build:
+      context: ./data-collector-service
+      dockerfile: Dockerfile
+    container_name: data-collector-service
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+    restart: always
+    command: [ "sh", "-c", "until nc -z rabbitmq 5672; do echo waiting for rabbitmq; sleep 2; done; node src/app.js" ]
+
+  ai_trainer_microservice:
+    build:
+      context: ./ai_trainer_microservice
+      dockerfile: Dockerfile
+    container_name: ai_trainer_microservice
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+    restart: always
+    command: [ "sh", "-c", "until nc -z rabbitmq 5672; do echo waiting for rabbitmq; sleep 2; done; node src/app.py" ]
+
+  signal-processor:
+    build:
+      context: ./signal-processor
+      dockerfile: Dockerfile
+    container_name: signal-processor
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+    restart: always
+    command: [ "sh", "-c", "until nc -z rabbitmq 5672; do echo waiting for rabbitmq; sleep 2; done; node src/app.js" ]
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "15672:15672" # Порт для доступа к RabbitMQ Management UI
+      - "5673:5672" # Основной порт для AMQP
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    restart: always
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "ping" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
